@@ -75,8 +75,8 @@ export function Header() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
-                  <img 
-                    src={user.avatar || "/placeholder.svg"} 
+                  <img
+                    src={user.avatar || "/placeholder.svg"}
                     alt={user.name}
                     className="h-8 w-8 rounded-full object-cover"
                   />
@@ -89,25 +89,25 @@ export function Header() {
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="cursor-pointer">
+                  <Link href="/profile" className="cursor-pointer">
                     <User className="mr-2 h-4 w-4" />
-                    My Dashboard
+                    My Profile
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard?tab=ratings" className="cursor-pointer">
+                  <Link href="/profile?tab=ratings" className="cursor-pointer">
                     <Star className="mr-2 h-4 w-4" />
                     My Ratings
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard?tab=watchlist" className="cursor-pointer">
-                    <Bookmark className="mr-2 h-4 w-4" />
-                    Watchlist
+                  <Link href="/profile?tab=reviews" className="cursor-pointer">
+                    <Star className="mr-2 h-4 w-4" />
+                    My Reviews
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard?tab=favorites" className="cursor-pointer">
+                  <Link href="/profile?tab=favorites" className="cursor-pointer">
                     <Heart className="mr-2 h-4 w-4" />
                     Favorites
                   </Link>
@@ -131,9 +131,9 @@ export function Header() {
           )}
 
           {/* Mobile Menu Button */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className="md:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
@@ -158,30 +158,30 @@ export function Header() {
             </div>
           </form>
           <nav className="flex flex-col gap-2">
-            <Link 
-              href="/movies" 
+            <Link
+              href="/movies"
               className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
               onClick={() => setMobileMenuOpen(false)}
             >
               Movies
             </Link>
-            <Link 
-              href="/top-rated" 
+            <Link
+              href="/top-rated"
               className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
               onClick={() => setMobileMenuOpen(false)}
             >
               Top Rated
             </Link>
-            <Link 
-              href="/genres" 
+            <Link
+              href="/genres"
               className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
               onClick={() => setMobileMenuOpen(false)}
             >
               Genres
             </Link>
             {!user && (
-              <Link 
-                href="/auth/login" 
+              <Link
+                href="/auth/login"
                 className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
                 onClick={() => setMobileMenuOpen(false)}
               >

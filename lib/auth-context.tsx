@@ -1,6 +1,9 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
+import { Session, AuthChangeEvent } from "@supabase/supabase-js"
 
 export interface User {
   id: string
@@ -18,102 +21,227 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signup: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>
-  logout: () => void
-  addToWatchlist: (movieId: string) => void
-  removeFromWatchlist: (movieId: string) => void
-  addToFavorites: (movieId: string) => void
-  removeFromFavorites: (movieId: string) => void
-  rateMovie: (movieId: string, rating: number) => void
+  logout: () => Promise<void>
+  addToWatchlist: (movieId: string) => Promise<void>
+  removeFromWatchlist: (movieId: string) => Promise<void>
+  addToFavorites: (movieId: string) => Promise<void>
+  removeFromFavorites: (movieId: string) => Promise<void>
+  rateMovie: (movieId: string, rating: number) => Promise<void>
   getUserRating: (movieId: string) => number | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const DEMO_USER: User = {
-  id: "demo-user",
-  name: "Demo User",
-  email: "demo@cinerate.com",
-  avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face",
-  joinedAt: "2024-01-01",
-  ratings: [],
-  watchlist: [],
-  favorites: []
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+
+  const fetchUserData = async (userId: string) => {
+    try {
+      // Fetch profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (profileError) throw profileError
+
+      // Fetch ratings (reviews)
+      const { data: reviews, error: reviewsError } = await supabase
+        .from('reviews')
+        .select('movie_id, rating')
+        .eq('user_id', userId)
+
+      if (reviewsError) throw reviewsError
+
+      // Fetch watchlist
+      const { data: watchlist, error: watchlistError } = await supabase
+        .from('watchlist')
+        .select('movie_id')
+        .eq('user_id', userId)
+
+      if (watchlistError) throw watchlistError
+
+      // Fetch favorites
+      const { data: favorites, error: favoritesError } = await supabase
+        .from('favorites')
+        .select('movie_id')
+        .eq('user_id', userId)
+
+      if (favoritesError) throw favoritesError
+
+      const userData: User = {
+        id: profile.id,
+        name: profile.name || profile.email.split('@')[0],
+        email: profile.email,
+        avatar: profile.avatar,
+        joinedAt: profile.joined_at,
+        ratings: reviews.map((r: any) => ({ movieId: r.movie_id, rating: r.rating })),
+        watchlist: watchlist.map((w: any) => w.movie_id),
+        favorites: favorites.map((f: any) => f.movie_id)
+      }
+
+      setUser(userData)
+    } catch (error) {
+      console.error("Error fetching user data:", error)
+      setUser(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // Check for stored user session (demo only - uses sessionStorage)
-    const storedUser = sessionStorage.getItem("cinerate-user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
-    }
-    setIsLoading(false)
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        fetchUserData(session.user.id)
+      } else {
+        setUser(null)
+        setIsLoading(false)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      if (session?.user) {
+        fetchUserData(session.user.id)
+      } else {
+        setUser(null)
+        setIsLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const saveUser = (userData: User) => {
-    sessionStorage.setItem("cinerate-user", JSON.stringify(userData))
-    setUser(userData)
-  }
-
-  const login = async (email: string, _password: string): Promise<{ success: boolean; error?: string }> => {
-    // Demo login - accepts any email/password
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const userData = { ...DEMO_USER, email, name: email.split("@")[0] }
-    saveUser(userData)
-    return { success: true }
-  }
-
-  const signup = async (name: string, email: string, _password: string): Promise<{ success: boolean; error?: string }> => {
-    // Demo signup
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const userData = { ...DEMO_USER, id: `user-${Date.now()}`, name, email }
-    saveUser(userData)
-    return { success: true }
-  }
-
-  const logout = () => {
-    sessionStorage.removeItem("cinerate-user")
-    setUser(null)
-  }
-
-  const addToWatchlist = (movieId: string) => {
-    if (!user) return
-    const updated = { ...user, watchlist: [...user.watchlist, movieId] }
-    saveUser(updated)
-  }
-
-  const removeFromWatchlist = (movieId: string) => {
-    if (!user) return
-    const updated = { ...user, watchlist: user.watchlist.filter(id => id !== movieId) }
-    saveUser(updated)
-  }
-
-  const addToFavorites = (movieId: string) => {
-    if (!user) return
-    const updated = { ...user, favorites: [...user.favorites, movieId] }
-    saveUser(updated)
-  }
-
-  const removeFromFavorites = (movieId: string) => {
-    if (!user) return
-    const updated = { ...user, favorites: user.favorites.filter(id => id !== movieId) }
-    saveUser(updated)
-  }
-
-  const rateMovie = (movieId: string, rating: number) => {
-    if (!user) return
-    const existingIndex = user.ratings.findIndex(r => r.movieId === movieId)
-    const newRatings = [...user.ratings]
-    if (existingIndex >= 0) {
-      newRatings[existingIndex] = { movieId, rating }
-    } else {
-      newRatings.push({ movieId, rating })
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
     }
-    const updated = { ...user, ratings: newRatings }
-    saveUser(updated)
+  }
+
+  const signup = async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name }
+        }
+      })
+      if (error) throw error
+
+      if (data.user) {
+        // Create profile entry using SQL trigger would be better, but doing it manually for now if trigger doesn't exist
+        // Note: We should ideally have a trigger on auth.users for this.
+        // Assuming the explicit insert here for robust client-side handling if triggers aren't set up.
+        // Check if profile exists first (trigger might have created it)
+        const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', data.user.id).single()
+
+        if (!existingProfile) {
+          await supabase.from('profiles').insert({
+            id: data.user.id, // Explicitly linking auth.uid()
+            name,
+            email,
+            joined_at: new Date().toISOString()
+          })
+        }
+      }
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  }
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    router.push('/')
+  }
+
+  const addToWatchlist = async (movieId: string) => {
+    if (!user) return
+    const { error } = await supabase.from('watchlist').insert({ user_id: user.id, movie_id: movieId })
+    if (error) {
+      console.error("Error adding to watchlist:", error)
+      return
+    }
+    await fetchUserData(user.id) // Refresh local state
+  }
+
+  const removeFromWatchlist = async (movieId: string) => {
+    if (!user) return
+    const { error } = await supabase.from('watchlist').delete().match({ user_id: user.id, movie_id: movieId })
+    if (error) {
+      console.error("Error removing from watchlist:", error)
+      return
+    }
+    await fetchUserData(user.id)
+  }
+
+  const addToFavorites = async (movieId: string) => {
+    if (!user) return
+    const { error } = await supabase.from('favorites').insert({ user_id: user.id, movie_id: movieId })
+    if (error) {
+      console.error("Error adding to favorites:", error)
+      return
+    }
+    await fetchUserData(user.id)
+  }
+
+  const removeFromFavorites = async (movieId: string) => {
+    if (!user) return
+    const { error } = await supabase.from('favorites').delete().match({ user_id: user.id, movie_id: movieId })
+    if (error) {
+      console.error("Error removing from favorites:", error)
+      return
+    }
+    await fetchUserData(user.id)
+  }
+
+  const rateMovie = async (movieId: string, rating: number) => {
+    if (!user) return
+
+    // Check if review exists
+    const { data: existingReview } = await supabase
+      .from('reviews')
+      .select('id')
+      .match({ user_id: user.id, movie_id: movieId })
+      .single()
+
+    let error;
+    if (existingReview) {
+      if (rating === 0) {
+        // Delete review if rating is 0 (removed)
+        const { error: delError } = await supabase.from('reviews').delete().eq('id', existingReview.id)
+        error = delError
+      } else {
+        // Update existing
+        const { error: upError } = await supabase.from('reviews').update({ rating }).eq('id', existingReview.id)
+        error = upError
+      }
+    } else if (rating > 0) {
+      // Insert new partial review (rating only)
+      const { error: insError } = await supabase.from('reviews').insert({
+        user_id: user.id,
+        movie_id: movieId,
+        user_name: user.name,
+        rating
+      })
+      error = insError
+    }
+
+    if (error) {
+      console.error("Error updating rating:", error)
+      return
+    }
+    await fetchUserData(user.id)
   }
 
   const getUserRating = (movieId: string): number | null => {

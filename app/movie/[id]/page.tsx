@@ -1,22 +1,62 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { ArrowLeft, Star, Clock, Calendar, Bookmark, Heart, Play } from "lucide-react"
+import { ArrowLeft, Star, Clock, Calendar, Bookmark, Heart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ReviewCard } from "@/components/review-card"
 import { StarRating } from "@/components/star-rating"
 import { AuthProvider, useAuth } from "@/lib/auth-context"
-import { getMovieById, getReviewsByMovieId, formatRatingCount, formatRuntime } from "@/lib/mock-data"
+import { getMovieById, formatRatingCount, formatRuntime } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+// import { supabase } from "@/lib/supabase" // Direct import not strictly needed if we just fetch in useEffect
+import { supabase } from "@/lib/supabase"
+import { ReviewFormDialog } from "@/components/review-form-dialog"
+
+// Extended Review Interface to match Supabase structure
+interface SupabaseReview {
+  id: string
+  movie_id: string
+  user_id: string
+  user_name: string
+  rating: number
+  title: string
+  content: string
+  helpful: number
+  created_at: string
+}
 
 function MovieDetailPage({ id }: { id: string }) {
   const movie = getMovieById(id)
-  const reviews = getReviewsByMovieId(id)
   const { user, addToWatchlist, removeFromWatchlist, addToFavorites, removeFromFavorites, rateMovie, getUserRating } = useAuth()
+
+  const [reviews, setReviews] = useState<SupabaseReview[]>([])
   const [showRatingModal, setShowRatingModal] = useState(false)
+  const [showReviewDialog, setShowReviewDialog] = useState(false)
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true)
+
+  const fetchReviews = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('movie_id', id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      if (data) setReviews(data)
+    } catch (error) {
+      console.error("Error fetching reviews:", error)
+    } finally {
+      setIsLoadingReviews(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    fetchReviews()
+  }, [fetchReviews])
 
   if (!movie) {
     return (
@@ -43,12 +83,13 @@ function MovieDetailPage({ id }: { id: string }) {
   const handleRate = (rating: number) => {
     rateMovie(movie.id, rating)
     setShowRatingModal(false)
+    fetchReviews() // Refresh to show updated rating if it adds a review entry
   }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
-      
+
       <main className="flex-1">
         {/* Hero Section with Backdrop */}
         <section className="relative">
@@ -60,7 +101,7 @@ function MovieDetailPage({ id }: { id: string }) {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
           </div>
-          
+
           <div className="relative mx-auto max-w-7xl px-4 pb-8 pt-4">
             {/* Back Button */}
             <Button variant="ghost" size="sm" asChild className="mb-8">
@@ -85,7 +126,7 @@ function MovieDetailPage({ id }: { id: string }) {
                 <h1 className="text-3xl font-bold text-foreground md:text-4xl lg:text-5xl text-balance">
                   {movie.title}
                 </h1>
-                
+
                 <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
@@ -119,7 +160,7 @@ function MovieDetailPage({ id }: { id: string }) {
                       <p className="text-xs text-muted-foreground">{formatRatingCount(movie.ratingCount)} ratings</p>
                     </div>
                   </div>
-                  
+
                   {user && (
                     <div className="border-l border-border pl-6">
                       <p className="text-xs text-muted-foreground mb-1">Your rating</p>
@@ -190,14 +231,32 @@ function MovieDetailPage({ id }: { id: string }) {
             <div className="mb-8 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-foreground">User Reviews</h2>
               {user && (
-                <Button variant="outline">Write a Review</Button>
+                <Button variant="outline" onClick={() => setShowReviewDialog(true)}>
+                  Write a Review
+                </Button>
               )}
             </div>
 
-            {reviews.length > 0 ? (
+            {isLoadingReviews ? (
+              <p>Loading reviews...</p>
+            ) : reviews.length > 0 ? (
               <div className="grid gap-4 md:grid-cols-2">
                 {reviews.map((review) => (
-                  <ReviewCard key={review.id} review={review} />
+                  // Map Supabase snake_case to camelCase expected by ReviewCard
+                  <ReviewCard
+                    key={review.id}
+                    review={{
+                      id: review.id,
+                      movieId: review.movie_id,
+                      userId: review.user_id,
+                      userName: review.user_name || 'Anonymous',
+                      rating: review.rating,
+                      title: review.title,
+                      content: review.content,
+                      helpful: review.helpful,
+                      createdAt: review.created_at
+                    }}
+                  />
                 ))}
               </div>
             ) : (
@@ -210,6 +269,14 @@ function MovieDetailPage({ id }: { id: string }) {
       </main>
 
       <Footer />
+
+      {/* Review Dialog */}
+      <ReviewFormDialog
+        movie={movie}
+        isOpen={showReviewDialog}
+        onClose={() => setShowReviewDialog(false)}
+        onSuccess={fetchReviews}
+      />
 
       {/* Rating Modal */}
       {showRatingModal && (
@@ -238,6 +305,7 @@ function MovieDetailPage({ id }: { id: string }) {
                   onClick={() => {
                     rateMovie(movie.id, 0)
                     setShowRatingModal(false)
+                    fetchReviews()
                   }}
                 >
                   Remove Rating
@@ -253,7 +321,7 @@ function MovieDetailPage({ id }: { id: string }) {
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  
+
   return (
     <AuthProvider>
       <MovieDetailPage id={id} />
